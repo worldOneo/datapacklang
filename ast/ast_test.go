@@ -18,25 +18,6 @@ func TestParse(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			"t1",
-			args{lexed: tokens.Lexerp(`
-			route("/test/", yeet("me", "out"))
-			`)},
-			Block{
-				Body: []Node{
-					Expression{"route", []Node{
-						String{"/test/"},
-						Expression{"yeet", []Node{
-							String{"me"},
-							String{"out"}},
-						},
-					},
-					},
-				},
-			},
-			false,
-		},
-		{
 			"value assignment",
 			args{lexed: tokens.Lexerp(`
 			store[test] = 100
@@ -82,6 +63,20 @@ func TestParse(t *testing.T) {
 			Block{
 				[]Node{
 					StoreAssign{"b", "a", tokens.OperationSet, Calculation{Int{1}, tokens.OperationAdd, Int{2}}},
+				},
+			},
+			false,
+		},
+		{
+			"if",
+			args{tokens.Lexerp("if 1 < 2 { 'say hi' }")},
+			Block{
+				[]Node{
+					If{Int{1}, tokens.OperationLt, Int{2}, Block{
+						[]Node{
+							String{"say hi"},
+						},
+					}},
 				},
 			},
 			false,

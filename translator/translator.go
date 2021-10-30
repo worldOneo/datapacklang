@@ -30,10 +30,11 @@ const (
 
 var storageAccessOperations = make(map[tokens.OperationType]string)
 var storageAssignOperations = make(map[tokens.OperationType]string)
+var conditionalOperators = make(map[tokens.OperationType]string)
 
 func init() {
 	storageAccessOperations[tokens.OperationAdd] = "+="
-	storageAccessOperations[tokens.OperationDec] = "+="
+	storageAccessOperations[tokens.OperationSub] = "-="
 	storageAccessOperations[tokens.OperationSet] = "="
 	storageAccessOperations[tokens.OperationMod] = "%="
 	storageAccessOperations[tokens.OperationMul] = "*="
@@ -42,6 +43,14 @@ func init() {
 	storageAssignOperations[tokens.OperationAdd] = storeAdd
 	storageAssignOperations[tokens.OperationDec] = storeSub
 	storageAssignOperations[tokens.OperationSet] = storeSet
+
+	conditionalOperators[tokens.OperationEq] = "="
+	conditionalOperators[tokens.OperationNeq] = "!="
+	conditionalOperators[tokens.OperationGt] = ">"
+	conditionalOperators[tokens.OperationGte] = ">="
+	conditionalOperators[tokens.OperationLt] = "<"
+	conditionalOperators[tokens.OperationLte] = "<="
+
 }
 
 type command = string
@@ -81,8 +90,55 @@ func (T *Translator) Translate(program ast.Node) ([]command, error) {
 		T.createStore(n.Identifier)
 		v, _ := T.getStore(n.Identifier)
 		return []command{fmt.Sprintf(createStorage, v)}, nil
+	case ast.If:
+		return T._if(n)
+	case ast.String:
+		return []command{n.Value}, nil
 	}
 	return []command{}, nil
+}
+
+func (T *Translator) _if(n ast.If) ([]command, error) {
+	cmds := make([]command, 0)
+	_, ok := T.getStore(dplTemp)
+	if !ok {
+		cmd, err := T.Translate(ast.CreateStore{dplTemp})
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd...)
+	}
+	temp, _ := T.getStore(dplTemp)
+	a := T.registers.claim(T)
+	b := T.registers.claim(T)
+	leftRegister := ast.StoreAssign{a, dplTemp, tokens.OperationSet, n.First}
+	rightRegister := ast.StoreAssign{b, dplTemp, tokens.OperationSet, n.Second}
+	leftEval, err := T.Translate(leftRegister)
+	if err != nil {
+		return nil, err
+	}
+	rightEval, err := T.Translate(rightRegister)
+	if err != nil {
+		return nil, err
+	}
+	cmds = append(cmds, leftEval...)
+	cmds = append(cmds, rightEval...)
+	aV := T.getVariable(a)
+	bV := T.getVariable(b)
+	prefix := fmt.Sprintf(ifScore, aV, temp, conditionalOperators[n.Comparator], bV, temp)
+	for _, elem := range n.Body.Body {
+		commands, err := T.Translate(elem)
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < len(commands); i++ {
+			commands[i] = prefix + commands[i]
+		}
+		cmds = append(cmds, commands...)
+	}
+	T.registers.free(a)
+	T.registers.free(b)
+	return cmds, nil
 }
 
 func (T *Translator) resolveCalculation(n ast.Calculation) ([]command, ast.StoreAccess, error) {

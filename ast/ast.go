@@ -45,6 +45,13 @@ type Calculation struct {
 	Second   Node
 }
 
+type If struct {
+	First      Node
+	Comparator tokens.OperationType
+	Second     Node
+	Body       Block
+}
+
 type StoreAssign struct {
 	Identifier string
 	Store      string
@@ -228,6 +235,27 @@ func (P *Parser) pullValue() (Node, error) {
 		return Int{next.ValueInt}, nil
 	case tokens.String:
 		return String{next.Content}, nil
+	case tokens.If:
+		first, err := P.pullValue()
+		if err != nil {
+			return nil, err
+		}
+		comparator, ok := P.next()
+		if !ok || comparator.Type != tokens.OperationComp {
+			return nil, fmt.Errorf("Comparator expected")
+		}
+		second, err := P.pullValue()
+		if err != nil {
+			return nil, err
+		}
+		body, err := P.parse()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := body.(Block); !ok {
+			return nil, fmt.Errorf("If requires body line: %d", next.Line)
+		}
+		return If{first, comparator.ValueInt, second, body.(Block)}, nil
 	}
 	return nil, fmt.Errorf("Identifier Expected line: %d at '%s'", next.Line, next.Content)
 }

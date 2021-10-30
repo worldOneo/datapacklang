@@ -215,6 +215,7 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 				continue
 			case "if":
 				C.append(Token{If, val, 0, 0, line})
+				continue
 			}
 			C.append(Token{Identifier, val, 0, 0, line})
 			continue
@@ -301,7 +302,7 @@ func isDigit(b rune) bool {
 }
 
 func isStringBegin(b rune) bool {
-	return b == '"'
+	return b == '\''
 }
 
 func isSpecialChar(b rune) bool {

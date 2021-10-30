@@ -13,18 +13,6 @@ func TestCodeLexer_Lexer(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			"t1",
-			`scope {
-				print("test")
-			}`,
-			[]Token{
-				identifierToken("scope", 0), scopeOpenToken(0),
-				identifierToken("print", 1), {ParenOpen, "(", 0, 0, 1}, stringToken("test", 1), {ParenClosed, ")", 0, 0, 1},
-				scopeClosedToken(2),
-			},
-			false,
-		},
-		{
 			"operations",
 			`store[test] = 1
 			store[test] += 1
@@ -53,6 +41,15 @@ func TestCodeLexer_Lexer(t *testing.T) {
 			[]Token{
 				identifierToken("a", 0), {IndexOpen, "[", 0, 0, 0}, identifierToken("b", 0), {IndexClosed, "]", 0, 0, 0},
 				{OperationAssignment, "=", OperationSet, 0, 0}, {Integer, "1", 1, 0, 0}, {Operation, "+", OperationAdd, 0, 0}, {Integer, "2", 2, 0, 0},
+			},
+			false,
+		},
+		{
+			"if",
+			"if 1 < 2 { `say hi` }",
+			[]Token{
+				{If, "if", 0, 0, 0}, {Integer, "1", 1, 0, 0}, {OperationComp, "<", OperationLt, 0, 0}, {Integer, "2", 2, 0, 0},
+				{ScopeOpen, "{", 0, 0, 0}, {String, "say hi", 0, 0, 0}, {ScopeClosed, "}", 0, 0, 0},
 			},
 			false,
 		},
