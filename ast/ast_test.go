@@ -27,10 +27,10 @@ func TestParse(t *testing.T) {
 			`)},
 			Block{
 				Body: []Node{
-					StoreAssign{"test", "store", tokens.OperationSet, Int{100}},
-					StoreAssign{"test", "store", tokens.OperationAdd, Int{1}},
-					StoreAssign{"test", "store", tokens.OperationAdd, Int{120}},
-					StoreAssign{"test", "store", tokens.OperationSub, Int{2}},
+					MakeStoreAssign("store", "test", true, tokens.OperationSet, Int{100}),
+					MakeStoreAssign("store", "test", true, tokens.OperationAdd, Int{1}),
+					MakeStoreAssign("store", "test", true, tokens.OperationAdd, Int{120}),
+					MakeStoreAssign("store", "test", true, tokens.OperationSub, Int{2}),
 				},
 			},
 			false,
@@ -42,7 +42,7 @@ func TestParse(t *testing.T) {
 			`)},
 			Block{
 				Body: []Node{
-					StoreAssign{"b", "a", tokens.OperationSet, StoreAccess{"d", "c"}},
+					MakeStoreAssign("a", "b", true, tokens.OperationSet, MakeStoreAccess("c", "d", true)),
 				},
 			},
 			false,
@@ -52,7 +52,7 @@ func TestParse(t *testing.T) {
 			args{tokens.Lexerp(`a[b] = c[d] + 3`)},
 			Block{
 				[]Node{
-					StoreAssign{"b", "a", tokens.OperationSet, Calculation{StoreAccess{"d", "c"}, tokens.OperationAdd, Int{3}}},
+					MakeStoreAssign("a", "b", true, tokens.OperationSet, Calculation{MakeStoreAccess("c", "d", true), tokens.OperationAdd, Int{3}}),
 				},
 			},
 			false,
@@ -62,7 +62,7 @@ func TestParse(t *testing.T) {
 			args{tokens.Lexerp(`a[b] = 1+2`)},
 			Block{
 				[]Node{
-					StoreAssign{"b", "a", tokens.OperationSet, Calculation{Int{1}, tokens.OperationAdd, Int{2}}},
+					MakeStoreAssign("a", "b", true, tokens.OperationSet, Calculation{Int{1}, tokens.OperationAdd, Int{2}}),
 				},
 			},
 			false,
@@ -72,7 +72,7 @@ func TestParse(t *testing.T) {
 			args{tokens.Lexerp("if 1 < 2 { 'say hi' }")},
 			Block{
 				[]Node{
-					If{Int{1}, tokens.OperationLt, Int{2}, Block{
+					If{Int{1}, tokens.OperationLt, Int{2}, false, Block{
 						[]Node{
 							String{"say hi"},
 						},

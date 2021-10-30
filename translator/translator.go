@@ -12,12 +12,14 @@ const (
 	editStorage      = "scoreboard players %s %s %s %d"
 	storageOperation = "scoreboard players operation %s %s %s %s %s"
 
-	ifValue = "execute if score %s %s matches %d run "
-	ifRange = "execute if score %s %s matches %s run "
-	ifScore = "execute if score %s %s %s %s %s run "
+	ifScore = "execute %s score %s %s %s %s %s run "
+	as      = "execute as %s run "
+	result  = "execute store result %s %s run %s "
 )
 
 const (
+	storeIf  = "if"
+	storeNot = "unless"
 	storeAdd = "add"
 	storeSet = "set"
 	storeSub = "remove"
@@ -88,44 +90,72 @@ func (T *Translator) Translate(program ast.Node) ([]command, error) {
 		return T.storeAssign(n)
 	case ast.CreateStore:
 		T.createStore(n.Identifier)
-		v, _ := T.getStore(n.Identifier)
-		return []command{fmt.Sprintf(createStorage, v)}, nil
+		return []command{fmt.Sprintf(createStorage, T.getStore(n.Identifier))}, nil
 	case ast.If:
 		return T._if(n)
 	case ast.String:
 		return []command{n.Value}, nil
+	case ast.As:
+		prefix := fmt.Sprintf(as, n.Selector)
+		cmds, err := T.Translate(n.Body)
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < len(cmds); i++ {
+			cmds[i] = prefix + cmds[i]
+		}
+		return cmds, nil
 	}
 	return []command{}, nil
 }
 
 func (T *Translator) _if(n ast.If) ([]command, error) {
 	cmds := make([]command, 0)
-	_, ok := T.getStore(dplTemp)
-	if !ok {
-		cmd, err := T.Translate(ast.CreateStore{dplTemp})
+
+	operator := storeIf
+	if n.Not {
+		operator = storeNot
+	}
+
+	a := T.registers.claim(T)
+	b := T.registers.claim(T)
+
+	// Short if optimization
+	var prefix string
+	aAc, okFirst := n.First.(ast.StoreAccess)
+	bAc, okSecond := n.First.(ast.StoreAccess)
+	if len(n.Body.Body) == 1 && okFirst && okSecond {
+		aV := T.trueName(aAc.Identifier)
+		bV := T.trueName(bAc.Identifier)
+		prefix = fmt.Sprintf(ifScore, operator, aV, aAc.Store, conditionalOperators[n.Comparator], bV, bAc.Store)
+	} else {
+		ok := T.createStore(dplTemp)
+		if !ok {
+			cmd, err := T.Translate(ast.CreateStore{dplTemp})
+			if err != nil {
+				return nil, err
+			}
+			cmds = append(cmds, cmd...)
+		}
+
+		temp := T.getStore(dplTemp)
+		leftRegister := ast.MakeStoreAssign(dplTemp, a, true, tokens.OperationSet, n.First)
+		rightRegister := ast.MakeStoreAssign(dplTemp, b, true, tokens.OperationSet, n.Second)
+		leftEval, err := T.Translate(leftRegister)
 		if err != nil {
 			return nil, err
 		}
-		cmds = append(cmds, cmd...)
+		rightEval, err := T.Translate(rightRegister)
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, leftEval...)
+		cmds = append(cmds, rightEval...)
+		aV := T.getVariable(a)
+		bV := T.getVariable(b)
+
+		prefix = fmt.Sprintf(ifScore, operator, aV, temp, conditionalOperators[n.Comparator], bV, temp)
 	}
-	temp, _ := T.getStore(dplTemp)
-	a := T.registers.claim(T)
-	b := T.registers.claim(T)
-	leftRegister := ast.StoreAssign{a, dplTemp, tokens.OperationSet, n.First}
-	rightRegister := ast.StoreAssign{b, dplTemp, tokens.OperationSet, n.Second}
-	leftEval, err := T.Translate(leftRegister)
-	if err != nil {
-		return nil, err
-	}
-	rightEval, err := T.Translate(rightRegister)
-	if err != nil {
-		return nil, err
-	}
-	cmds = append(cmds, leftEval...)
-	cmds = append(cmds, rightEval...)
-	aV := T.getVariable(a)
-	bV := T.getVariable(b)
-	prefix := fmt.Sprintf(ifScore, aV, temp, conditionalOperators[n.Comparator], bV, temp)
 	for _, elem := range n.Body.Body {
 		commands, err := T.Translate(elem)
 		if err != nil {
@@ -143,7 +173,7 @@ func (T *Translator) _if(n ast.If) ([]command, error) {
 
 func (T *Translator) resolveCalculation(n ast.Calculation) ([]command, ast.StoreAccess, error) {
 	cmds := make([]command, 0)
-	_, ok := T.getStore(dplTemp)
+	ok := T.createStore(dplTemp)
 	if !ok {
 		cmd, err := T.Translate(ast.CreateStore{dplTemp})
 		if err != nil {
@@ -153,9 +183,9 @@ func (T *Translator) resolveCalculation(n ast.Calculation) ([]command, ast.Store
 	}
 	a := T.registers.claim(T)
 	b := T.registers.claim(T)
-	initRegister := ast.StoreAssign{a, dplTemp, tokens.OperationSet, n.First}
-	calcRegister := ast.StoreAssign{b, dplTemp, tokens.OperationSet, n.Second}
-	operations := ast.StoreAssign{a, dplTemp, n.Operator, ast.StoreAccess{b, dplTemp}}
+	initRegister := ast.MakeStoreAssign(dplTemp, a, true, tokens.OperationSet, n.First)
+	calcRegister := ast.MakeStoreAssign(dplTemp, b, true, tokens.OperationSet, n.Second)
+	operations := ast.MakeStoreAssign(dplTemp, a, true, n.Operator, ast.MakeStoreAccess(dplTemp, b, true))
 	init, err := T.Translate(initRegister)
 	if err != nil {
 		return nil, ast.StoreAccess{}, err
@@ -173,55 +203,57 @@ func (T *Translator) resolveCalculation(n ast.Calculation) ([]command, ast.Store
 	cmds = append(cmds, op...)
 	T.registers.free(a)
 	T.registers.free(b)
-	return cmds, ast.StoreAccess{a, dplTemp}, nil
+	return cmds, ast.MakeStoreAccess(dplTemp, a, true), nil
 }
 
 func (T *Translator) storeAssign(n ast.StoreAssign) ([]command, error) {
-	store, ok := T.getStore(n.Store)
-	if !ok {
-		return nil, fmt.Errorf("Store %s doesnt exist", n.Store)
+	store := T.getStore(n.Store)
+	variable := T.getVariable(n.Identifier.Identifier)
+	if !n.Identifier.IsVar {
+		variable = n.Identifier.Identifier
 	}
-	variable := T.getVariable(n.Identifier)
-	value, ok := n.Value.(ast.Int)
-	if !ok {
-		value, ok := n.Value.(ast.StoreAccess)
+	value := n.Value
+	switch v := value.(type) {
+	case ast.Int:
+		op, ok := storageAssignOperations[n.Operation]
 		if !ok {
-			value, ok := n.Value.(ast.Calculation)
-			if !ok {
-				return []command{}, nil
-			}
-			cmds, access, err := T.resolveCalculation(value)
-			if err != nil {
-				return nil, err
-			}
-			assign, err := T.storeAssign(ast.StoreAssign{n.Identifier, n.Store, n.Operation, access})
-			if err != nil {
-				return nil, err
-			}
-			cmds = append(cmds, assign...)
-			return cmds, nil
+			return nil, fmt.Errorf("Invalid operator")
 		}
+		return []command{fmt.Sprintf(editStorage, op, variable, store, v.Value)}, nil
+	case ast.StoreAccess:
 		op, ok := storageAccessOperations[n.Operation]
 		if !ok {
 			return nil, fmt.Errorf("Invalid operator")
 		}
-		withStore, ok := T.getStore(value.Store)
-		if !ok {
-			return nil, fmt.Errorf("Store %s doesnt exist", n.Store)
+		withStore := T.getStore(v.Store)
+		withVar := T.getVariable(v.Identifier.Identifier)
+		if !n.Identifier.IsVar {
+			withVar = n.Identifier.Identifier
 		}
-		withVar := T.getVariable(value.Identifier)
 		return []command{fmt.Sprintf(storageOperation, variable, store, op, withVar, withStore)}, nil
+	case ast.Calculation:
+		cmds, access, err := T.resolveCalculation(v)
+		if err != nil {
+			return nil, err
+		}
+		assign, err := T.storeAssign(ast.MakeStoreAssign(n.Store, n.Identifier.Identifier, n.Identifier.IsVar, n.Operation, access))
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, assign...)
+		return cmds, nil
+	case ast.String:
+		return []command{fmt.Sprintf(result, variable, store, v.Value)}, nil
 	}
-	op, ok := storageAssignOperations[n.Operation]
-	if !ok {
-		return nil, fmt.Errorf("Invalid operator")
-	}
-	return []command{fmt.Sprintf(editStorage, op, variable, store, value.Value)}, nil
+	return nil, fmt.Errorf("Invalid assignment")
 }
 
-func (T *Translator) getStore(key string) (string, bool) {
-	k, ok := T.stores[key]
-	return k, ok
+func (T *Translator) getStore(key string) string {
+	_, ok := T.stores[key]
+	if !ok {
+		T.stores[key] = T.nextIdentifier()
+	}
+	return T.stores[key]
 }
 
 func (T *Translator) getVariable(variable string) string {
@@ -233,11 +265,12 @@ func (T *Translator) getVariable(variable string) string {
 	return v
 }
 
-func (T *Translator) createStore(variable string) {
+func (T *Translator) createStore(variable string) bool {
 	_, ok := T.stores[variable]
 	if !ok {
 		T.stores[variable] = T.nextIdentifier()
 	}
+	return ok
 }
 
 func toString(i int) string {
@@ -250,4 +283,11 @@ func toString(i int) string {
 func (T *Translator) nextIdentifier() string {
 	T.nextVar++
 	return toString(T.nextVar)
+}
+
+func (T *Translator) trueName(index ast.Index) string {
+	if index.IsVar {
+		return T.getVariable(index.Identifier)
+	}
+	return index.Identifier
 }

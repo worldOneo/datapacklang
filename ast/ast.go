@@ -45,22 +45,33 @@ type Calculation struct {
 	Second   Node
 }
 
+type As struct {
+	Selector string
+	Body     Block
+}
+
 type If struct {
 	First      Node
 	Comparator tokens.OperationType
 	Second     Node
+	Not        bool
 	Body       Block
 }
 
-type StoreAssign struct {
+type Index struct {
 	Identifier string
+	IsVar      bool
+}
+
+type StoreAssign struct {
+	Identifier Index
 	Store      string
 	Operation  tokens.OperationType
 	Value      Node
 }
 
 type StoreAccess struct {
-	Identifier string
+	Identifier Index
 	Store      string
 }
 
@@ -175,9 +186,10 @@ func (P *Parser) pullValue() (Node, error) {
 		} else if peek.Type == tokens.IndexOpen {
 			P.next()
 			identifier, ok := P.next()
-			if !ok || identifier.Type != tokens.Identifier {
+			if !ok || (identifier.Type != tokens.Identifier && identifier.Type != tokens.String) {
 				break
 			}
+			isVar := identifier.Type == tokens.Identifier
 			closedIndex, ok := P.next()
 			if !ok || closedIndex.Type != tokens.IndexClosed {
 				break
@@ -190,23 +202,23 @@ func (P *Parser) pullValue() (Node, error) {
 					if err != nil {
 						return nil, err
 					}
-					return Calculation{StoreAccess{identifier.Content, next.Content}, operation.ValueInt, value}, nil
+					return Calculation{StoreAccess{Index{identifier.Content, isVar}, next.Content}, operation.ValueInt, value}, nil
 				}
-				return StoreAccess{identifier.Content, next.Content}, nil
+				return StoreAccess{Index{identifier.Content, isVar}, next.Content}, nil
 			}
 			P.next()
 			if operation.ValueInt == tokens.OperationInc {
-				return StoreAssign{identifier.Content, next.Content, tokens.OperationAdd, Int{1}}, nil
+				return StoreAssign{Index{identifier.Content, isVar}, next.Content, tokens.OperationAdd, Int{1}}, nil
 			}
 
 			if operation.ValueInt == tokens.OperationDec {
-				return StoreAssign{identifier.Content, next.Content, tokens.OperationSub, Int{1}}, nil
+				return StoreAssign{Index{identifier.Content, isVar}, next.Content, tokens.OperationSub, Int{1}}, nil
 			}
 			value, err := P.pullValue()
 			if err != nil {
 				return nil, err
 			}
-			return StoreAssign{identifier.Content, next.Content, operation.ValueInt, value}, nil
+			return StoreAssign{Index{identifier.Content, isVar}, next.Content, operation.ValueInt, value}, nil
 		}
 	case tokens.Create:
 		if peek.Type != tokens.Identifier {
@@ -236,6 +248,11 @@ func (P *Parser) pullValue() (Node, error) {
 	case tokens.String:
 		return String{next.Content}, nil
 	case tokens.If:
+		not := false
+		if peek.Type == tokens.Not {
+			not = true
+			P.next()
+		}
 		first, err := P.pullValue()
 		if err != nil {
 			return nil, err
@@ -255,7 +272,28 @@ func (P *Parser) pullValue() (Node, error) {
 		if _, ok := body.(Block); !ok {
 			return nil, fmt.Errorf("If requires body line: %d", next.Line)
 		}
-		return If{first, comparator.ValueInt, second, body.(Block)}, nil
+		return If{first, comparator.ValueInt, second, not, body.(Block)}, nil
+	case tokens.As:
+		if peek.Type != tokens.String {
+			return nil, fmt.Errorf("As requires selector line: %d", next.Line)
+		}
+		P.next()
+		body, err := P.parse()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := body.(Block); !ok {
+			return nil, fmt.Errorf("As requires body line: %d", next.Line)
+		}
+		return As{peek.Content, body.(Block)}, nil
 	}
 	return nil, fmt.Errorf("Identifier Expected line: %d at '%s'", next.Line, next.Content)
+}
+
+func MakeStoreAccess(store, identifier string, isVar bool) StoreAccess {
+	return StoreAccess{Identifier: Index{Identifier: identifier, IsVar: isVar}, Store: store}
+}
+
+func MakeStoreAssign(store, identifier string, isVar bool, operation tokens.OperationType, value Node) StoreAssign {
+	return StoreAssign{Identifier: Index{Identifier: identifier, IsVar: isVar}, Store: store, Operation: operation, Value: value}
 }

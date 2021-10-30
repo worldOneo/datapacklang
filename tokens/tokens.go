@@ -34,6 +34,8 @@ const (
 	OperationComp
 	Create
 	If
+	As
+	Not
 )
 
 const (
@@ -89,13 +91,13 @@ const commentIntroduction = "//"
 type CodeLexer struct {
 	code        []rune
 	words       []Token
-	currentWord int
+	tokenIndex int
 }
 
 func (C *CodeLexer) append(word Token) {
-	C.words[C.currentWord] = word
-	C.currentWord++
-	if C.currentWord > len(C.words) {
+	C.words[C.tokenIndex] = word
+	C.tokenIndex++
+	if C.tokenIndex >= len(C.words) {
 		old := C.words
 		C.words = make([]Token, len(C.words)*2)
 		copy(C.words, old)
@@ -127,7 +129,7 @@ func Lexer(code string) ([]Token, error) {
 	if err != nil {
 		return words, err
 	}
-	return words[0:parser.currentWord], err
+	return words[0:parser.tokenIndex], err
 }
 
 func (C *CodeLexer) Lexer() ([]Token, error) {
@@ -176,14 +178,14 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 				if isSpecialChar(n) {
 					sign += string(n)
 				}
-				
+
 				var ok bool
 				var operator int
 				if operator, ok = assignmentMap[sign]; ok {
 					C.append(Token{OperationAssignment, sign, operator, 0, line})
 				} else if operator, ok = comparatorMap[sign]; ok {
 					C.append(Token{OperationComp, sign, operator, 0, line})
-				}else if operator, ok = operationMap[sign]; ok {
+				} else if operator, ok = operationMap[sign]; ok {
 					C.append(Token{Operation, sign, operator, 0, line})
 				}
 				if ok {
@@ -215,6 +217,12 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 				continue
 			case "if":
 				C.append(Token{If, val, 0, 0, line})
+				continue
+			case "as":
+				C.append(Token{As, val, 0, 0, line})
+				continue
+			case "not":
+				C.append(Token{Not, val, 0, 0, line})
 				continue
 			}
 			C.append(Token{Identifier, val, 0, 0, line})

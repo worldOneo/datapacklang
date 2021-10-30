@@ -70,9 +70,23 @@ if myStore[valueA] < yourStore[valueA] {
   'say you have more than I'
 }
 ```
+Not
+```
+if not myStore[valueA] == 0 {
+  'say valueA is not 0'
+}
+```
 
 ### Own commands
 Own commands must be declared with '
 ```
 'say im a own command'
+```
+
+### As
+To execute as use `as`:
+```
+as '@e[type=minecraft:villager]' {
+  'say I am a villager'
+}
 ```
