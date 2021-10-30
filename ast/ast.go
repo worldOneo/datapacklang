@@ -39,6 +39,12 @@ type CreateStore struct {
 	Identifier string
 }
 
+type Calculation struct {
+	First    Node
+	Operator tokens.OperationType
+	Second   Node
+}
+
 type StoreAssign struct {
 	Identifier string
 	Store      string
@@ -170,7 +176,15 @@ func (P *Parser) pullValue() (Node, error) {
 				break
 			}
 			operation, ok := P.peek()
-			if !ok || operation.Type != tokens.Operation {
+			if !ok || operation.Type != tokens.OperationAssignment {
+				if ok && operation.Type == tokens.Operation {
+					P.next()
+					value, err := P.pullValue()
+					if err != nil {
+						return nil, err
+					}
+					return Calculation{StoreAccess{identifier.Content, next.Content}, operation.ValueInt, value}, nil
+				}
 				return StoreAccess{identifier.Content, next.Content}, nil
 			}
 			P.next()
@@ -202,6 +216,15 @@ func (P *Parser) pullValue() (Node, error) {
 	case tokens.Float:
 		return Float{next.ValueFloat}, nil
 	case tokens.Integer:
+		peek, ok := P.peek()
+		if ok && peek.Type == tokens.Operation {
+			P.next()
+			value, err := P.pullValue()
+			if err != nil {
+				return nil, err
+			}
+			return Calculation{Int{next.ValueInt}, peek.ValueInt, value}, nil
+		}
 		return Int{next.ValueInt}, nil
 	case tokens.String:
 		return String{next.Content}, nil

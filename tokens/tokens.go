@@ -29,9 +29,11 @@ const (
 	IndexOpen
 	IndexClosed
 	Comma
-	Assignment
 	Operation
+	OperationAssignment
+	OperationComp
 	Create
+	If
 )
 
 const (
@@ -40,7 +42,46 @@ const (
 	OperationInc
 	OperationDec
 	OperationSet
+	OperationMod
+	OperationMul
+	OperationDiv
+
+	OperationEq
+	OperationLt
+	OperationLte
+	OperationGt
+	OperationGte
+	OperationNeq
 )
+
+var operationMap = make(map[string]OperationType)
+var assignmentMap = make(map[string]OperationType)
+var comparatorMap = make(map[string]OperationType)
+
+func init() {
+	operationMap["+"] = OperationAdd
+	operationMap["-"] = OperationSub
+	operationMap["*"] = OperationMul
+	operationMap["%"] = OperationMod
+	operationMap["/"] = OperationDiv
+
+	assignmentMap["="] = OperationSet
+
+	assignmentMap["--"] = OperationDec
+	assignmentMap["++"] = OperationInc
+
+	assignmentMap["+="] = OperationAdd
+	assignmentMap["-="] = OperationSub
+	assignmentMap["*="] = OperationMul
+	assignmentMap["%="] = OperationMod
+	assignmentMap["/="] = OperationDiv
+
+	comparatorMap[">"] = OperationGt
+	comparatorMap[">="] = OperationGte
+	comparatorMap["=="] = OperationEq
+	comparatorMap["<="] = OperationLte
+	comparatorMap["<"] = OperationLt
+}
 
 const windowsLineSpererator = "\r\n"
 const commentIntroduction = "//"
@@ -94,10 +135,9 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 	line := 0
 	buff := strings.Builder{}
 
-	
 	for i := 0; i < len(C.code); i++ {
 		c := C.code[i]
-		safeInc := func () (rune, bool) {
+		safeInc := func() (rune, bool) {
 			i++
 			if i < len(C.code) {
 				return C.code[i], true
@@ -131,28 +171,29 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 				C.append(Token{ParenClosed, ")", 0, 0, line})
 			case ',':
 				C.append(Token{Comma, ",", 0, 0, line})
-			case '=':
-				C.append(Token{Operation, "=", OperationSet, 0, line})
-			case '+', '-':
-				if n == '+' {
-					C.append(Token{Operation, "++", OperationInc, 0, line})
+			case '+', '-', '/', '*', '%', '=', '>', '<':
+				sign := string(c)
+				if isSpecialChar(n) {
+					sign += string(n)
 				}
-				if n == '-' {
-					C.append(Token{Operation, "--", OperationDec, 0, line})
+				
+				var ok bool
+				var operator int
+				if operator, ok = assignmentMap[sign]; ok {
+					C.append(Token{OperationAssignment, sign, operator, 0, line})
+				} else if operator, ok = comparatorMap[sign]; ok {
+					C.append(Token{OperationComp, sign, operator, 0, line})
+				}else if operator, ok = operationMap[sign]; ok {
+					C.append(Token{Operation, sign, operator, 0, line})
 				}
-				if n == '=' {
-					if c == '+' {
-						C.append(Token{Operation, "+=", OperationAdd, 0, line})
-						i++
-						continue
-					}
-					C.append(Token{Operation, "-=", OperationSub, 0, line})
+				if ok {
+					i += len(sign) - 1
 				}
-				i++
+				continue
 			case '[':
 				C.append(Token{IndexOpen, "[", 0, 0, line})
 			case ']':
-				C.append(Token{IndexClosed, "[", 0, 0, line})
+				C.append(Token{IndexClosed, "]", 0, 0, line})
 			}
 			continue
 		}
@@ -172,6 +213,8 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 			case "create":
 				C.append(Token{Create, val, 0, 0, line})
 				continue
+			case "if":
+				C.append(Token{If, val, 0, 0, line})
 			}
 			C.append(Token{Identifier, val, 0, 0, line})
 			continue
@@ -224,6 +267,7 @@ func (C *CodeLexer) Lexer() ([]Token, error) {
 					break
 				}
 			}
+			i--
 			str := buff.String()
 			if !float {
 				intVal, err := strconv.Atoi(str)
@@ -262,10 +306,12 @@ func isStringBegin(b rune) bool {
 
 func isSpecialChar(b rune) bool {
 	return b == ',' || isEqual(b) || b == '@' ||
+		b == '*' || b == '/' || b == '%' ||
 		b == '{' || b == '}' ||
 		b == '(' || b == ')' ||
 		b == '[' || b == ']' ||
-		b == '+' || b == '-'
+		b == '+' || b == '-' ||
+		b == '>' || b == '<'
 }
 
 func isSpace(b rune) bool {

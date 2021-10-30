@@ -66,6 +66,26 @@ func TestParse(t *testing.T) {
 			},
 			false,
 		},
+		{
+			"calculations",
+			args{tokens.Lexerp(`a[b] = c[d] + 3`)},
+			Block{
+				[]Node{
+					StoreAssign{"b", "a", tokens.OperationSet, Calculation{StoreAccess{"d", "c"}, tokens.OperationAdd, Int{3}}},
+				},
+			},
+			false,
+		},
+		{
+			"calculations primitives",
+			args{tokens.Lexerp(`a[b] = 1+2`)},
+			Block{
+				[]Node{
+					StoreAssign{"b", "a", tokens.OperationSet, Calculation{Int{1}, tokens.OperationAdd, Int{2}}},
+				},
+			},
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
