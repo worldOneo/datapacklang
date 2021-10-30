@@ -37,7 +37,7 @@ execute if score f c = g c run execute if score k c = j c run say someVar resete
   - [x] Variables
   - [x] Basic Calculations
   - [x] If-Statement
-  - [ ] Transpile datapacks recursively
+  - [x] Transpile datapacks recursively
 
 ## Code examples
 ### Store
