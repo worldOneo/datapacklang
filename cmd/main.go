@@ -29,7 +29,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	res, err := translator.New().Translate(parsed)
+	translator := translator.New()
+	res, err := translator.Translate(parsed)
 	if err != nil {
 		log.Fatal(err)
 	}
