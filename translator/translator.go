@@ -105,6 +105,16 @@ func (T *Translator) Translate(program ast.Node) ([]command, error) {
 			cmds[i] = prefix + cmds[i]
 		}
 		return cmds, nil
+	case ast.Scoped:
+		prefix := n.Prefix + " "
+		cmds, err := T.Translate(n.Body)
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < len(cmds); i++ {
+			cmds[i] = prefix + cmds[i]
+		}
+		return cmds, nil
 	}
 	return []command{}, nil
 }
@@ -123,11 +133,13 @@ func (T *Translator) _if(n ast.If) ([]command, error) {
 	// Short if optimization
 	var prefix string
 	aAc, okFirst := n.First.(ast.StoreAccess)
-	bAc, okSecond := n.First.(ast.StoreAccess)
+	bAc, okSecond := n.Second.(ast.StoreAccess)
 	if len(n.Body.Body) == 1 && okFirst && okSecond {
 		aV := T.trueName(aAc.Identifier)
 		bV := T.trueName(bAc.Identifier)
-		prefix = fmt.Sprintf(ifScore, operator, aV, aAc.Store, conditionalOperators[n.Comparator], bV, bAc.Store)
+		aS := T.getStore(aAc.Store)
+		bS := T.getStore(bAc.Store)
+		prefix = fmt.Sprintf(ifScore, operator, aV, aS, conditionalOperators[n.Comparator], bV, bS)
 	} else {
 		ok := T.createStore(dplTemp)
 		if !ok {

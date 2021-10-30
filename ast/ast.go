@@ -15,8 +15,9 @@ const (
 
 type Node interface{}
 
-type Variable struct {
-	Name string
+type Scoped struct {
+	Prefix string
+	Body   Block
 }
 
 type String struct {
@@ -173,7 +174,7 @@ func (P *Parser) pullValue() (Node, error) {
 		return nil, fmt.Errorf("Expected value")
 	}
 
-	peek, _ := P.peek()
+	peek, peeked := P.peek()
 	switch next.Type {
 	case tokens.Identifier:
 		if peek.Type == tokens.ParenOpen {
@@ -235,8 +236,7 @@ func (P *Parser) pullValue() (Node, error) {
 	case tokens.Float:
 		return Float{next.ValueFloat}, nil
 	case tokens.Integer:
-		peek, ok := P.peek()
-		if ok && peek.Type == tokens.Operation {
+		if peeked && peek.Type == tokens.Operation {
 			P.next()
 			value, err := P.pullValue()
 			if err != nil {
@@ -246,6 +246,16 @@ func (P *Parser) pullValue() (Node, error) {
 		}
 		return Int{next.ValueInt}, nil
 	case tokens.String:
+		if peeked && peek.Type == tokens.ScopeOpen {
+			body, err := P.parse()
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := body.(Block); !ok {
+				return nil, fmt.Errorf("Prefixed scopes require a block line: %d", peek.Line)
+			}
+			return Scoped{next.Content, body.(Block)}, nil
+		}
 		return String{next.Content}, nil
 	case tokens.If:
 		not := false

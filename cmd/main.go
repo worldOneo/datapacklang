@@ -64,8 +64,10 @@ func TranslateFile(path string, overwrite bool) error {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if info.IsDir() {
-			return fmt.Errorf("Path %s is directory but file required", path)
+		if info != nil {
+			if info.IsDir() {
+				return fmt.Errorf("Path %s is directory but file required", path)
+			}
 		}
 	}
 	content, err := ioutil.ReadFile(path)

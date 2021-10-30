@@ -1,0 +1,24 @@
+create store someStore
+
+// Nicer variables
+someStore[someVar] = 100
+
+// Math
+someStore[myNumber] = 10*10+10
+
+// If statements
+if someStore[someVar] == 100 {
+  'say counter reached 100'
+  'say will be reseted now'
+  someStore[someVar] = 2 - 2
+  // Nested ifs
+  if someStore[someVar] == 0 {
+    'say someVar reseted'
+  }
+}
+
+// Custom scopes
+'execute at @a' {
+  'say hi'
+  'say im still here'
+}

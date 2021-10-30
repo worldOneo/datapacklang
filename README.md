@@ -90,3 +90,17 @@ as '@e[type=minecraft:villager]' {
   'say I am a villager'
 }
 ```
+
+###  Custom prefixed scopes
+To simplify functions custom scopes were introduced:
+```
+'execute at @a' {
+  'say hi'
+  'say im still here'
+}
+```
+Will compile to:
+```
+execute at @a say hi
+execute at @a say im still here
+```
